@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VeaCode 2.0 — Dashboard</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { min-height:100vh; }
+    .dash {
+      position:relative;z-index:1;
+      max-width:1060px;margin:0 auto;
+      padding:calc(var(--nav-h)+40px) 24px 80px;
+    }
+
+    /* GREETING */
+    .greet { display:flex;align-items:center;gap:18px;margin-bottom:36px; }
+    .greet-av {
+      width:58px;height:58px;border-radius:50%;flex-shrink:0;
+      background:var(--blue-dim);border:2px solid var(--e3);
+      display:flex;align-items:center;justify-content:center;
+      font-size:1.2rem;font-weight:700;color:var(--blue2);overflow:hidden;
+    }
+    .greet-av img { width:100%;height:100%;object-fit:cover;display:none; }
+    .greet-hi  { font-size:1.45rem;font-weight:700;letter-spacing:-0.025em;color:var(--w1); }
+    .greet-sub { font-size:0.8rem;color:var(--w2);margin-top:3px; }
+
+    /* QUICK ACTIONS */
+    .qa-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+      gap:11px;margin-bottom:40px;
+    }
+    .qa {
+      padding:20px 18px;border-radius:var(--r2);
+      display:flex;flex-direction:column;gap:9px;
+      text-decoration:none;cursor:pointer;
+      transition:all 0.22s var(--ease);
+    }
+    .qa:hover { background:var(--s2);border-color:var(--e3);transform:translateY(-2px);box-shadow:0 8px 26px rgba(0,0,0,0.3); }
+    .qa-ico   { font-size:1.4rem; }
+    .qa-t     { font-size:0.86rem;font-weight:600;color:var(--w1);letter-spacing:-0.01em; }
+    .qa-d     { font-size:0.72rem;color:var(--w2);line-height:1.55; }
+
+    /* SECTION */
+    .ds { margin-bottom:38px; }
+    .ds-hdr { display:flex;align-items:center;justify-content:space-between;margin-bottom:14px; }
+    .ds-t   { font-size:0.86rem;font-weight:600;color:var(--w1);letter-spacing:-0.01em; }
+    .ds-lnk { font-size:0.72rem;color:var(--blue2);background:none;border:none;cursor:pointer;font-family:var(--f);transition:color 0.14s; }
+    .ds-lnk:hover { color:var(--blue3); }
+
+    /* STATS */
+    .stat-row {
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(155px,1fr));
+      gap:11px;
+    }
+    .stat {
+      padding:17px 16px 14px;border-radius:var(--r2);
+    }
+    .stat-lbl { font-family:var(--fm);font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--w3);margin-bottom:7px; }
+    .stat-val { font-size:1.7rem;font-weight:700;letter-spacing:-0.03em;color:var(--w1);line-height:1; }
+    .stat-sub { font-size:0.68rem;color:var(--w3);margin-top:5px; }
+
+    /* PROJECTS EMPTY */
+    .proj-empty {
+      padding:48px 24px;border-radius:var(--r2);
+      text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;
+    }
+    .pe-ico { font-size:2.2rem;opacity:0.25; }
+    .pe-t   { font-size:0.88rem;font-weight:600;color:var(--w2); }
+    .pe-s   { font-size:0.76rem;color:var(--w3);line-height:1.65;max-width:270px; }
+
+    /* ACTIVITY */
+    .act-list { display:flex;flex-direction:column;gap:5px; }
+    .act-row {
+      display:flex;align-items:center;gap:11px;
+      padding:9px 13px;border-radius:var(--r);
+      transition:background 0.14s;
+    }
+    .act-row:hover { background:var(--s2); }
+    .act-ico { font-size:0.95rem;flex-shrink:0;opacity:0.65; }
+    .act-msg { flex:1;font-size:0.78rem;color:var(--w2); }
+    .act-ts  { font-family:var(--fm);font-size:0.62rem;color:var(--w4);flex-shrink:0; }
+    .act-empty { padding:20px;text-align:center;font-size:0.78rem;color:var(--w3); }
+
+    @media(max-width:600px) { .qa-grid { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+<div class="amb"><div class="amb-orb a1"></div><div class="amb-orb a2"></div><div class="amb-grid"></div></div>
+
+<nav class="v-nav">
+  <a href="index.html" class="v-nav-brand">
+    <img src="images/VeaCode.png" alt="" onerror="this.style.display='none'"/>
+    <span class="v-nav-brand-name">VeaCode</span>
+    <span class="v-nav-brand-badge">2.0</span>
+  </a>
+  <div class="v-nav-links">
+    <a href="dashboard.html" class="v-nav-link cur">Dashboard</a>
+    <a href="home.html"      class="v-nav-link">Editor</a>
+    <a href="docs.html"      class="v-nav-link">Docs</a>
+  </div>
+  <div class="v-nav-end">
+    <a href="settings.html" class="v-nav-user" id="navUser">
+      <div class="v-avatar-sm" id="navAv"><img id="navAvImg" src="" alt=""/><span id="navAvInit">?</span></div>
+      <span class="v-nav-uname" id="navUname">—</span>
+    </a>
+  </div>
+</nav>
+
+<div class="dash">
+
+  <!-- GREETING -->
+  <div class="greet">
+    <div class="greet-av" id="greetAv">
+      <img id="greetAvImg" src="" alt=""/>
+      <span id="greetInit">?</span>
+    </div>
+    <div>
+      <p class="greet-hi" id="greetHi">Halo!</p>
+      <p class="greet-sub" id="greetSub">Hari ini mau ngoding apa?</p>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div class="qa-grid">
+    <a href="home.html" class="qa glass">
+      <div class="qa-ico">⚡</div>
+      <div class="qa-t">Buka Editor</div>
+      <div class="qa-d">Langsung ke workspace coding kamu.</div>
+    </a>
+    <a href="docs.html" class="qa glass">
+      <div class="qa-ico">📚</div>
+      <div class="qa-t">Dokumentasi</div>
+      <div class="qa-d">Panduan lengkap dan changelog.</div>
+    </a>
+    <a href="settings.html" class="qa glass">
+      <div class="qa-ico">⚙️</div>
+      <div class="qa-t">Settings</div>
+      <div class="qa-d">Profil, PIN, dan ekspor data.</div>
+    </a>
+    <a href="settings.html#security" class="qa glass">
+      <div class="qa-ico">🔒</div>
+      <div class="qa-t">Security</div>
+      <div class="qa-d">Ganti PIN atau backup data.</div>
+    </a>
+  </div>
+
+  <!-- STATS -->
+  <div class="ds">
+    <div class="ds-hdr"><p class="ds-t">Ringkasan Akun</p></div>
+    <div class="stat-row">
+      <div class="stat glass">
+        <p class="stat-lbl">Username</p>
+        <p class="stat-val" id="sUsername" style="font-size:1.1rem">—</p>
+        <p class="stat-sub">Unik di perangkat ini</p>
+      </div>
+      <div class="stat glass">
+        <p class="stat-lbl">Akun dibuat</p>
+        <p class="stat-val" id="sCreated" style="font-size:0.9rem;letter-spacing:-0.01em">—</p>
+        <p class="stat-sub">Lokal · no backend</p>
+      </div>
+      <div class="stat glass">
+        <p class="stat-lbl">Penyimpanan</p>
+        <p class="stat-val" id="sStorage">0 KB</p>
+        <p class="stat-sub">Data localStorage</p>
+      </div>
+      <div class="stat glass">
+        <p class="stat-lbl">Login terakhir</p>
+        <p class="stat-val" id="sLastLogin" style="font-size:0.85rem;letter-spacing:0">—</p>
+        <p class="stat-sub">Sesi sebelumnya</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CODE PROJECTS -->
+  <div class="ds">
+    <div class="ds-hdr">
+      <p class="ds-t">Code Projects</p>
+      <button class="ds-lnk">Lihat semua</button>
+    </div>
+    <div class="proj-empty glass">
+      <div class="pe-ico">📁</div>
+      <p class="pe-t">Belum ada proyek</p>
+      <p class="pe-s">Code Projects akan hadir di update selanjutnya. Untuk sekarang buka Editor langsung.</p>
+      <a href="home.html" class="btn btn-blue btn-sm" style="margin-top:6px">Buka Editor</a>
+    </div>
+  </div>
+
+  <!-- ACTIVITY -->
+  <div class="ds">
+    <div class="ds-hdr"><p class="ds-t">Aktivitas Terbaru</p></div>
+    <div class="act-list glass" style="padding:6px" id="actList"></div>
+  </div>
+
+</div>
+
+<div id="veaToasts" class="v-toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
