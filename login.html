@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VeaCode 2.0 — Sign in</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { display:flex; flex-direction:column; min-height:100vh; overflow:hidden; }
+    .auth-wrap {
+      position:relative;z-index:1;flex:1;
+      display:flex;align-items:center;justify-content:center;
+      padding:calc(var(--nav-h)+24px) 20px 40px;
+    }
+    .auth-card { width:100%; max-width:400px; padding:0; }
+
+    /* HEAD */
+    .ac-head { padding:28px 26px 0; text-align:center; }
+    .ac-logo { width:44px;height:44px;border-radius:10px;object-fit:contain;margin:0 auto 12px;display:block; }
+    .ac-brand { font-size:1.05rem;font-weight:700;letter-spacing:-0.025em;color:var(--w1);margin-bottom:3px; }
+    .ac-mode  { font-size:0.8rem;color:var(--w2); }
+
+    /* DEVICE WARNING */
+    .dev-warn {
+      margin:16px 26px 0;
+      background:rgba(245,197,66,0.07);
+      border:1px solid rgba(245,197,66,0.2);
+      border-radius:var(--r);
+      padding:11px 13px;
+      font-size:0.74rem;color:#d4a218;
+      display:flex;align-items:flex-start;gap:8px;line-height:1.55;
+    }
+    .dev-warn svg { flex-shrink:0;margin-top:1px; }
+
+    /* TABS */
+    .ac-tabs {
+      display:flex;margin:16px 26px 0;
+      background:var(--s2);border:1px solid var(--e2);border-radius:var(--r);overflow:hidden;
+    }
+    .ac-tab {
+      flex:1;padding:9px;font-size:0.79rem;font-weight:600;
+      color:var(--w3);background:transparent;border:none;cursor:pointer;
+      font-family:var(--f);transition:all 0.18s;
+    }
+    .ac-tab.on { background:var(--blue);color:#fff;border-radius:var(--r);margin:2px; }
+
+    /* BODY */
+    .ac-body { padding:20px 26px; }
+    .ac-step { display:none;flex-direction:column;gap:13px; }
+    .ac-step.on { display:flex; }
+
+    /* Step dots */
+    .step-dots { display:flex;justify-content:center;gap:5px;margin-bottom:18px; }
+    .sdot {
+      width:6px;height:6px;border-radius:50%;background:var(--e2);
+      transition:all 0.2s;
+    }
+    .sdot.done { background:var(--blue); }
+    .sdot.cur  { background:var(--blue2);width:16px;border-radius:3px; }
+
+    .step-label { font-size:0.9rem;font-weight:600;color:var(--w1); }
+    .step-hint  { font-size:0.76rem;color:var(--w2);line-height:1.55; }
+
+    /* Avatar upload */
+    .av-row { display:flex;align-items:center;gap:13px; }
+    .av-circle {
+      width:58px;height:58px;border-radius:50%;flex-shrink:0;
+      background:var(--blue-dim);border:2px dashed var(--e3);
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;overflow:hidden;position:relative;
+      transition:border-color 0.17s;
+    }
+    .av-circle:hover { border-color:var(--blue); }
+    .av-circle img { position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none; }
+    .av-plus { font-size:1.3rem;color:var(--w3); }
+    .av-info-t { font-size:0.8rem;font-weight:600;color:var(--w1);margin-bottom:3px; }
+    .av-info-s { font-size:0.7rem;color:var(--w3); }
+    #avFile { display:none; }
+
+    /* FOOT */
+    .ac-foot { padding:12px 26px 22px;border-top:1px solid var(--e1); }
+    .foot-row { display:flex;gap:8px; }
+    .foot-note { text-align:center;font-size:0.71rem;color:var(--w3);margin-top:10px; }
+    .foot-note a { color:var(--blue2);text-decoration:none; }
+    .foot-note a:hover { text-decoration:underline; }
+
+    .back-btn {
+      background:none;border:none;color:var(--w3);
+      font-family:var(--f);font-size:0.75rem;cursor:pointer;
+      padding:0;display:flex;align-items:center;gap:4px;
+      transition:color 0.14s;
+    }
+    .back-btn:hover { color:var(--w1); }
+  </style>
+</head>
+<body>
+<div class="amb"><div class="amb-orb a1"></div><div class="amb-orb a2"></div><div class="amb-grid"></div></div>
+
+<nav class="v-nav">
+  <a href="index.html" class="v-nav-brand">
+    <img src="images/VeaCode.png" alt="VeaCode" onerror="this.style.display='none'"/>
+    <span class="v-nav-brand-name">VeaCode</span>
+    <span class="v-nav-brand-badge">2.0</span>
+  </a>
+</nav>
+
+<div class="auth-wrap">
+  <div class="auth-card glass" id="authCard">
+
+    <div class="ac-head">
+      <img src="images/VeaCode.png" alt="" class="ac-logo" onerror="this.style.display='none'"/>
+      <p class="ac-brand">VeaCode 2.0</p>
+      <p class="ac-mode" id="acMode">Selamat datang kembali</p>
+    </div>
+
+    <div class="dev-warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Akun VeaCode tidak bisa dibuat multi perangkat, jadi mohon maaf atas ketidaknyamanannya.</span>
+    </div>
+
+    <div class="ac-tabs">
+      <button class="ac-tab" id="tLogin"    onclick="VAL.switchTab('login')">Masuk</button>
+      <button class="ac-tab" id="tRegister" onclick="VAL.switchTab('register')">Daftar</button>
+    </div>
+
+    <div class="ac-body" id="acBody">
+
+      <!-- ====== LOGIN ====== -->
+      <div class="ac-step on" id="sLoginForm">
+        <div class="v-field">
+          <label class="v-label">Username</label>
+          <input class="v-input" id="lUser" placeholder="username_kamu" autocomplete="off"/>
+          <span class="v-err" id="lUserErr">Username tidak ditemukan.</span>
+        </div>
+        <div class="v-field">
+          <label class="v-label">PIN (10 digit)</label>
+          <div class="pin-row" id="lPinRow"></div>
+          <span class="v-err" id="lPinErr">PIN salah. Coba lagi.</span>
+        </div>
+      </div>
+
+      <!-- ====== REGISTER step 1: profil ====== -->
+      <div class="ac-step" id="sReg1">
+        <div class="step-dots">
+          <div class="sdot cur"></div><div class="sdot"></div><div class="sdot"></div>
+        </div>
+        <p class="step-label">Buat profil</p>
+        <p class="step-hint">Avatar dan display name bersifat opsional dan bisa diubah nanti di Settings.</p>
+        <div class="av-row">
+          <div class="av-circle" id="avCircle" onclick="document.getElementById('avFile').click()">
+            <img id="avPreviewImg" src="" alt=""/>
+            <span class="av-plus" id="avPlus">＋</span>
+          </div>
+          <div>
+            <p class="av-info-t">Foto profil</p>
+            <p class="av-info-s">Opsional · JPG/PNG · maks 2MB</p>
+          </div>
+        </div>
+        <input type="file" id="avFile" accept="image/*"/>
+        <div class="v-field">
+          <label class="v-label">Display Name <span style="color:var(--w4)">(opsional)</span></label>
+          <input class="v-input" id="rDisplay" placeholder="Nama tampilan..."/>
+        </div>
+        <div class="v-field">
+          <label class="v-label">Username <span style="color:var(--red)">*</span></label>
+          <input class="v-input" id="rUser" placeholder="huruf, angka, dan _ saja" autocomplete="off"/>
+          <span class="v-err" id="rUserErr">Username sudah dipakai atau tidak valid.</span>
+        </div>
+      </div>
+
+      <!-- ====== REGISTER step 2: PIN ====== -->
+      <div class="ac-step" id="sReg2">
+        <div class="step-dots">
+          <div class="sdot done"></div><div class="sdot cur"></div><div class="sdot"></div>
+        </div>
+        <p class="step-label">Buat PIN</p>
+        <p class="step-hint">10 digit PIN adalah satu-satunya kunci akun kamu. Hafalkan — tidak bisa dipulihkan jika lupa.</p>
+        <div class="v-field">
+          <label class="v-label">PIN baru</label>
+          <div class="pin-row" id="rPin1Row"></div>
+        </div>
+        <div class="v-field">
+          <label class="v-label">Ulangi PIN</label>
+          <div class="pin-row" id="rPin2Row"></div>
+          <span class="v-err" id="rPinErr">PIN tidak cocok. Coba lagi.</span>
+        </div>
+      </div>
+
+      <!-- ====== REGISTER step 3: TOS ====== -->
+      <div class="ac-step" id="sReg3">
+        <div class="step-dots">
+          <div class="sdot done"></div><div class="sdot done"></div><div class="sdot cur"></div>
+        </div>
+        <p class="step-label">Terms of Service</p>
+        <p class="step-hint">Baca ringkasan sebelum melanjutkan.</p>
+        <div style="background:var(--s2);border:1px solid var(--e2);border-radius:var(--r);padding:13px;max-height:130px;overflow-y:auto;font-size:0.74rem;color:var(--w2);line-height:1.7">
+          <strong style="color:var(--w1)">Ringkasan Terms:</strong><br/>
+          Akun VeaCode disimpan secara lokal. PIN tidak dapat dipulihkan jika hilang. Data kamu adalah milikmu sepenuhnya. VeaCode tidak mengumpulkan atau mengirim data ke server. Username bersifat unik per perangkat.
+          Baca <a href="tos.html" target="_blank" style="color:var(--blue2)">Terms of Service lengkap</a>.
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:0.78rem;color:var(--w2)">
+          <input type="checkbox" id="tosOk" style="margin-top:2px;accent-color:var(--blue);flex-shrink:0"/>
+          Saya menyetujui Terms of Service VeaCode 2.0.
+        </label>
+      </div>
+
+    </div><!-- /acBody -->
+
+    <div class="ac-foot" id="acFoot">
+      <!-- login foot -->
+      <div id="footLogin">
+        <button class="btn btn-blue btn-fw" id="btnLogin">Masuk</button>
+        <p class="foot-note">Belum punya akun? <a href="#" onclick="VAL.switchTab('register')">Daftar sekarang</a></p>
+      </div>
+      <!-- register foot -->
+      <div id="footReg" style="display:none">
+        <div class="foot-row">
+          <button class="back-btn" id="btnBack" style="display:none">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Kembali
+          </button>
+          <button class="btn btn-blue btn-fw" id="btnNext">Lanjut →</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LOADER -->
+<div class="v-loader" id="vLoader">
+  <img src="images/VeaCode.png" alt="" style="width:38px;height:38px;border-radius:9px;margin-bottom:4px" onerror="this.style.display='none'"/>
+  <div class="v-spinner"></div>
+  <p class="v-loader-msg" id="vLoaderMsg">Menyiapkan akun VeaCode...</p>
+  <div class="v-progress"><div class="v-progress-bar" id="vLoaderBar" style="width:0%"></div></div>
+</div>
+
+<div id="veaToasts" class="v-toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
