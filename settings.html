@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VeaCode 2.0 — Settings</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { min-height:100vh; }
+    .set-wrap {
+      position:relative;z-index:1;
+      max-width:720px;margin:0 auto;
+      padding:calc(var(--nav-h)+36px) 24px 80px;
+    }
+
+    /* PAGE HEADER */
+    .set-hdr { margin-bottom:28px; }
+    .set-title { font-size:1.6rem;font-weight:700;letter-spacing:-0.03em;color:var(--w1); }
+    .set-sub   { font-size:0.8rem;color:var(--w2);margin-top:4px; }
+
+    /* TABS */
+    .set-tabs {
+      display:flex;gap:0;margin-bottom:28px;
+      background:var(--s1);border:1px solid var(--e2);
+      border-radius:var(--r2);overflow:hidden;padding:3px;
+    }
+    .set-tab {
+      flex:1;padding:9px;font-size:0.8rem;font-weight:600;
+      color:var(--w3);background:transparent;border:none;
+      cursor:pointer;font-family:var(--f);
+      border-radius:var(--r);transition:all 0.17s;
+    }
+    .set-tab:hover { background:var(--s2);color:var(--w2); }
+    .set-tab.on    { background:var(--s3);color:var(--w1); }
+
+    /* PANELS */
+    .set-panel { display:none;flex-direction:column;gap:18px; }
+    .set-panel.on { display:flex; }
+
+    /* SETTING ITEM */
+    .si {
+      padding:20px 22px;border-radius:var(--r2);
+      display:flex;flex-direction:column;gap:14px;
+    }
+    .si-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
+    .si-t   { font-size:0.9rem;font-weight:600;color:var(--w1);letter-spacing:-0.01em; }
+    .si-d   { font-size:0.76rem;color:var(--w2);line-height:1.6;margin-top:3px; }
+    .si-action { flex-shrink:0; }
+
+    /* AVATAR SECTION */
+    .av-row { display:flex;align-items:center;gap:16px; }
+    .av-big {
+      width:72px;height:72px;border-radius:50%;flex-shrink:0;
+      background:var(--blue-dim);border:2px solid var(--e3);
+      display:flex;align-items:center;justify-content:center;
+      font-size:1.4rem;font-weight:700;color:var(--blue2);
+      overflow:hidden;cursor:pointer;transition:border-color 0.17s;
+    }
+    .av-big:hover { border-color:var(--blue); }
+    .av-big img { width:100%;height:100%;object-fit:cover;display:none; }
+    .av-big-info {}
+    .av-big-t { font-size:0.82rem;font-weight:600;color:var(--w1);margin-bottom:4px; }
+    .av-big-s { font-size:0.72rem;color:var(--w3); }
+    .av-big-btns { display:flex;gap:7px;margin-top:8px; }
+
+    /* DIVIDER */
+    .si-div { height:1px;background:var(--e1); }
+
+    /* USERNAME CHANGE */
+    .uc-locked {
+      display:flex;align-items:center;gap:10px;
+      background:var(--s2);border:1px solid var(--e2);border-radius:var(--r);
+      padding:9px 13px;
+    }
+    .uc-lock-ico { color:var(--w3);flex-shrink:0; }
+    .uc-cur      { font-family:var(--fm);font-size:0.82rem;color:var(--w1);flex:1; }
+    .uc-form     { display:none;flex-direction:column;gap:10px; }
+    .uc-form.show { display:flex; }
+
+    /* PIN CHANGE */
+    .pin-change-form { display:none;flex-direction:column;gap:12px; }
+    .pin-change-form.show { display:flex; }
+
+    /* DANGER ZONE */
+    .danger-zone { border-color:rgba(255,68,68,0.2) !important; }
+    .danger-zone::before { background:none !important; }
+    .dz-item {
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:12px 0;border-bottom:1px solid var(--e1);
+    }
+    .dz-item:last-child { border-bottom:none; }
+    .dz-t { font-size:0.84rem;font-weight:600;color:var(--w1); }
+    .dz-d { font-size:0.73rem;color:var(--w2);margin-top:3px;line-height:1.55; }
+
+    /* EXPORT/IMPORT */
+    .exp-row { display:flex;gap:10px;flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+<div class="amb"><div class="amb-orb a1"></div><div class="amb-orb a2"></div><div class="amb-grid"></div></div>
+<nav class="v-nav">
+  <a href="index.html" class="v-nav-brand">
+    <img src="images/VeaCode.png" alt="" onerror="this.style.display='none'"/>
+    <span class="v-nav-brand-name">VeaCode</span>
+    <span class="v-nav-brand-badge">2.0</span>
+  </a>
+  <div class="v-nav-links">
+    <a href="dashboard.html" class="v-nav-link">Dashboard</a>
+    <a href="home.html"      class="v-nav-link">Editor</a>
+    <a href="docs.html"      class="v-nav-link">Docs</a>
+  </div>
+  <div class="v-nav-end">
+    <a href="settings.html" class="v-nav-user" id="navUser">
+      <div class="v-avatar-sm" id="navAv"><img id="navAvImg" src="" alt=""/><span id="navAvInit">?</span></div>
+      <span class="v-nav-uname" id="navUname">—</span>
+    </a>
+  </div>
+</nav>
+
+<div class="set-wrap">
+  <div class="set-hdr">
+    <h1 class="set-title">Settings</h1>
+    <p class="set-sub">Kelola akun, keamanan, dan data VeaCode kamu.</p>
+  </div>
+
+  <!-- TABS -->
+  <div class="set-tabs">
+    <button class="set-tab on" id="tabAccount"  onclick="VS.switchTab('account')">Account</button>
+    <button class="set-tab"    id="tabSecurity" onclick="VS.switchTab('security')">Security &amp; Data</button>
+  </div>
+
+  <!-- ==============================
+       ACCOUNT PANEL
+  ============================== -->
+  <div class="set-panel on" id="panelAccount">
+
+    <!-- AVATAR -->
+    <div class="si glass">
+      <div class="si-t">Foto Profil</div>
+      <div class="si-d">Foto yang tampil di dashboard dan navigasi. Opsional.</div>
+      <div class="av-row">
+        <div class="av-big" id="avBig" onclick="document.getElementById('avFileInput').click()">
+          <img id="avBigImg" src="" alt=""/>
+          <span id="avBigInit">?</span>
+        </div>
+        <div class="av-big-info">
+          <p class="av-big-t" id="avBigName">—</p>
+          <p class="av-big-s">JPG / PNG · maks 2MB</p>
+          <div class="av-big-btns">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('avFileInput').click()">Ganti foto</button>
+            <button class="btn btn-danger btn-sm" id="btnRemoveAv">Hapus</button>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="avFileInput" accept="image/*" style="display:none"/>
+    </div>
+
+    <!-- DISPLAY NAME -->
+    <div class="si glass">
+      <div class="si-t">Display Name</div>
+      <div class="si-d">Nama yang ditampilkan di antarmuka. Jika kosong, akan mengikuti username.</div>
+      <div class="v-field">
+        <input class="v-input" id="displayNameInput" placeholder="Nama tampilan..."/>
+      </div>
+      <div>
+        <button class="btn btn-blue btn-sm" id="btnSaveDisplay">Simpan Display Name</button>
+      </div>
+    </div>
+
+    <!-- USERNAME -->
+    <div class="si glass">
+      <div class="si-t">Username</div>
+      <div class="si-d">Identitas unik akun kamu. Perubahan memerlukan verifikasi PIN.</div>
+      <div class="uc-locked" id="ucLocked">
+        <svg class="uc-lock-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="uc-cur" id="ucCurDisplay">@username</span>
+        <button class="btn btn-ghost btn-sm" id="btnUnlockUsername">Ganti</button>
+      </div>
+      <div class="uc-form" id="ucForm">
+        <div class="v-field">
+          <label class="v-label">Username baru</label>
+          <input class="v-input" id="ucNewInput" placeholder="username_baru" autocomplete="off"/>
+          <span class="v-err" id="ucNewErr">Username tidak valid atau sudah dipakai.</span>
+        </div>
+        <div class="v-field">
+          <label class="v-label">Verifikasi PIN (10 digit)</label>
+          <div class="pin-row" id="ucPinRow"></div>
+          <span class="v-err" id="ucPinErr">PIN salah.</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" id="btnCancelUc">Batal</button>
+          <button class="btn btn-blue btn-sm" id="btnConfirmUc">Simpan Username</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==============================
+       SECURITY & DATA PANEL
+  ============================== -->
+  <div class="set-panel" id="panelSecurity">
+
+    <!-- CHANGE PIN -->
+    <div class="si glass">
+      <div class="si-head">
+        <div>
+          <p class="si-t">Ganti PIN</p>
+          <p class="si-d">PIN adalah satu-satunya kunci akun. Ganti secara berkala untuk keamanan lebih baik.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm si-action" id="btnOpenPinChange">Ganti PIN</button>
+      </div>
+      <div class="pin-change-form" id="pinChangeForm">
+        <div class="si-div"></div>
+        <div class="v-field">
+          <label class="v-label">PIN baru</label>
+          <div class="pin-row" id="pcPin1Row"></div>
+        </div>
+        <div class="v-field">
+          <label class="v-label">PIN lama (verifikasi)</label>
+          <div class="pin-row" id="pcPin2Row"></div>
+          <span class="v-err" id="pcOldErr">PIN lama salah.</span>
+        </div>
+        <div class="v-field">
+          <label class="v-label">Ulangi PIN baru</label>
+          <div class="pin-row" id="pcPin3Row"></div>
+          <span class="v-err" id="pcMatchErr">PIN baru tidak cocok.</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" id="btnCancelPinChange">Batal</button>
+          <button class="btn btn-blue btn-sm" id="btnConfirmPinChange">Ganti PIN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPORT / IMPORT -->
+    <div class="si glass">
+      <p class="si-t">Ekspor &amp; Impor Data</p>
+      <p class="si-d">Buat backup seluruh data akun kamu sebagai file JSON, atau pulihkan dari backup sebelumnya.</p>
+      <div class="exp-row">
+        <button class="btn btn-ghost btn-sm" id="btnExport">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Ekspor Data (5–10 detik)
+        </button>
+        <button class="btn btn-ghost btn-sm" id="btnImport">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Impor Data (20–30 detik)
+        </button>
+      </div>
+      <input type="file" id="importFileInput" accept=".json" style="display:none"/>
+      <p style="font-size:0.72rem;color:var(--w3);margin-top:2px">Data impor akan <strong style="color:var(--w2)">menimpa</strong> data yang ada. Backup dulu sebelum impor.</p>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="si glass danger-zone" style="border-color:rgba(255,68,68,0.18)">
+      <p class="si-t" style="color:var(--red)">Danger Zone</p>
+      <div class="dz-item">
+        <div>
+          <p class="dz-t">Logout</p>
+          <p class="dz-d">Keluar dari akun di perangkat ini. Data tetap tersimpan.</p>
+        </div>
+        <button class="btn btn-danger btn-sm" id="btnLogout">Logout</button>
+      </div>
+      <div class="dz-item">
+        <div>
+          <p class="dz-t">Hapus Akun</p>
+          <p class="dz-d">Hapus seluruh data akun dari perangkat ini. Tindakan ini tidak dapat dibatalkan.</p>
+        </div>
+        <button class="btn btn-danger btn-sm" id="btnDeleteAccount">Hapus Akun</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="v-overlay" id="deleteModal">
+  <div class="v-modal glass">
+    <div class="vm-head">
+      <span class="vm-title" style="color:var(--red)">Hapus Akun</span>
+      <button class="vm-close" onclick="VEA.closeModal('deleteModal')">✕</button>
+    </div>
+    <div class="vm-body" style="display:flex;flex-direction:column;gap:12px">
+      <p style="font-size:0.84rem;color:var(--w2);line-height:1.7">Tindakan ini akan menghapus seluruh data akun kamu dari localStorage, termasuk username, profil, dan aktivitas. <strong style="color:var(--w1)">Tidak dapat dibatalkan.</strong></p>
+      <div class="v-field">
+        <label class="v-label">Verifikasi PIN untuk konfirmasi</label>
+        <div class="pin-row" id="delPinRow"></div>
+        <span class="v-err" id="delPinErr">PIN salah.</span>
+      </div>
+    </div>
+    <div class="vm-foot">
+      <button class="btn btn-ghost btn-sm" onclick="VEA.closeModal('deleteModal')">Batal</button>
+      <button class="btn btn-danger btn-sm" id="btnConfirmDelete">Ya, Hapus Akun</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADER -->
+<div class="v-loader" id="vLoader">
+  <div class="v-spinner"></div>
+  <p class="v-loader-msg" id="vLoaderMsg">Memproses...</p>
+  <div class="v-progress"><div class="v-progress-bar" id="vLoaderBar" style="width:0%"></div></div>
+</div>
+
+<div id="veaToasts" class="v-toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
