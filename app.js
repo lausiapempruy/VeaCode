@@ -1,625 +1,962 @@
-/* ============================================================
-   CODETESTER V2.0 — app.js
-   Handles both landing page (index.html) and editor (home.html)
-============================================================ */
+/* ================================================================
+   VEACODE 2.0 — app.js
+   Complete application logic for all pages.
+   No backend. localStorage only.
+================================================================ */
 
-/* ---- detect which page we're on ---- */
-const IS_EDITOR  = document.body.classList.contains('editor-page');
-const IS_LANDING = document.body.classList.contains('landing-page');
+'use strict';
 
-/* ============================================================
-   LANDING PAGE LOGIC
-============================================================ */
-if (IS_LANDING) {
-  fetch('config.json')
-    .then(r => r.json())
-    .then(cfg => {
-      renderFeatures(cfg.features || []);
-      renderFiles(cfg.supported_files || []);
-    })
-    .catch(() => {
-      // fallback inline data if config fails
-      renderFeatures([
-        { icon:'⚡', label:'Instant Run',       desc:'Zero build step. Hit Run and see results immediately.' },
-        { icon:'📁', label:'Multi-file',         desc:'HTML, CSS, JS, JSON, and Python in one session.' },
-        { icon:'🪟', label:'Live Preview',       desc:'Side-by-side editor and preview, resizable to your flow.' },
-        { icon:'📟', label:'Console Panel',      desc:'Capture logs, warnings, and errors right below the preview.' },
-        { icon:'🔒', label:'No account needed',  desc:'Lite by design. No login, no cloud save, just code.' },
-        { icon:'🎨', label:'Glass UI',            desc:'Crafted for focus — blur, depth, calm dark aesthetics.' },
-      ]);
-      renderFiles(['html','css','js','json','py']);
+/* ================================================================
+   CONSTANTS
+================================================================ */
+const LS = {
+  USER:     'vea2_user',
+  SESSION:  'vea2_session',
+  ACTIVITY: 'vea2_activity',
+};
+
+const PAGE = {
+  IS_LANDING:   document.body.classList.contains('') && !!document.getElementById('featGrid'),
+  IS_LOGIN:     !!document.getElementById('authCard'),
+  IS_DASHBOARD: !!document.getElementById('actList'),
+  IS_EDITOR:    !!document.getElementById('edTa'),
+  IS_SETTINGS:  !!document.getElementById('panelAccount'),
+  IS_DOCS:      !!document.querySelector('.doc-content'),
+  IS_TOS:       !!document.querySelector('.tos-body'),
+};
+
+/* ================================================================
+   UTILS
+================================================================ */
+const VEA = {
+
+  /* ---- STORAGE ---- */
+  get(key) {
+    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  },
+  set(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch { return false; }
+  },
+  remove(key) {
+    try { localStorage.removeItem(key); } catch {}
+  },
+
+  /* ---- CURRENT USER ---- */
+  user() { return VEA.get(LS.USER); },
+  session() { return VEA.get(LS.SESSION); },
+  isLoggedIn() {
+    const u = VEA.user(); const s = VEA.session();
+    return !!(u && s && s.username === u.username);
+  },
+
+  /* ---- SHA-256 (pure JS for browser) ---- */
+  async sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  },
+
+  /* ---- TOAST ---- */
+  toast(msg, type='') {
+    const wrap = document.getElementById('veaToasts');
+    if (!wrap) return;
+    const t = document.createElement('div');
+    t.className = 'v-toast' + (type ? ' '+type : '');
+    t.textContent = msg;
+    wrap.appendChild(t);
+    setTimeout(() => t.remove(), 3200);
+  },
+
+  /* ---- LOADER ---- */
+  loaderOn(msg='Memproses...') {
+    const el = document.getElementById('vLoader');
+    const msg_el = document.getElementById('vLoaderMsg');
+    const bar = document.getElementById('vLoaderBar');
+    if (!el) return;
+    if (msg_el) msg_el.textContent = msg;
+    if (bar) bar.style.width = '0%';
+    el.classList.add('on');
+  },
+  loaderProgress(pct, msg) {
+    const bar = document.getElementById('vLoaderBar');
+    const msg_el = document.getElementById('vLoaderMsg');
+    if (bar) bar.style.width = pct + '%';
+    if (msg && msg_el) msg_el.textContent = msg;
+  },
+  loaderOff() {
+    const el = document.getElementById('vLoader');
+    if (el) el.classList.remove('on');
+  },
+
+  /* ---- MODAL ---- */
+  openModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('on');
+  },
+  closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('on');
+  },
+
+  /* ---- LOG ACTIVITY ---- */
+  logActivity(msg) {
+    const acts = VEA.get(LS.ACTIVITY) || [];
+    acts.unshift({ msg, ts: new Date().toISOString() });
+    if (acts.length > 20) acts.splice(20);
+    VEA.set(LS.ACTIVITY, acts);
+  },
+
+  /* ---- STORAGE SIZE ---- */
+  storageSize() {
+    let total = 0;
+    for (const k in localStorage) {
+      if (!localStorage.hasOwnProperty(k)) continue;
+      total += (localStorage[k].length + k.length) * 2;
+    }
+    if (total < 1024) return total + ' B';
+    if (total < 1024*1024) return (total/1024).toFixed(1) + ' KB';
+    return (total/(1024*1024)).toFixed(2) + ' MB';
+  },
+
+  /* ---- RELATIVE TIME ---- */
+  relTime(iso) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    const sec = Math.floor(diff/1000);
+    if (sec < 60)    return 'baru saja';
+    if (sec < 3600)  return Math.floor(sec/60) + ' menit lalu';
+    if (sec < 86400) return Math.floor(sec/3600) + ' jam lalu';
+    return Math.floor(sec/86400) + ' hari lalu';
+  },
+
+  /* ---- FORMAT DATE ---- */
+  fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+  },
+
+  /* ---- BUILD PIN ROW ---- */
+  buildPinRow(containerId) {
+    const row = document.getElementById(containerId);
+    if (!row) return;
+    row.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      const inp = document.createElement('input');
+      inp.type = 'password';
+      inp.maxLength = 1;
+      inp.className = 'pin-cell';
+      inp.inputMode = 'numeric';
+      inp.pattern = '[0-9]';
+      inp.dataset.i = i;
+      inp.addEventListener('input', e => {
+        const val = e.target.value.replace(/\D/g,'');
+        e.target.value = val;
+        e.target.classList.toggle('filled', !!val);
+        if (val && i < 9) {
+          row.children[i+1].focus();
+        }
+      });
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !inp.value && i > 0) {
+          row.children[i-1].focus();
+          row.children[i-1].value = '';
+          row.children[i-1].classList.remove('filled');
+        }
+      });
+      row.appendChild(inp);
+    }
+  },
+
+  getPinValue(containerId) {
+    const row = document.getElementById(containerId);
+    if (!row) return '';
+    return Array.from(row.children).map(c => c.value).join('');
+  },
+
+  clearPinRow(containerId) {
+    const row = document.getElementById(containerId);
+    if (!row) return;
+    Array.from(row.children).forEach(c => { c.value=''; c.classList.remove('filled'); });
+    if (row.children[0]) row.children[0].focus();
+  },
+
+  /* ---- UPDATE NAV USER ---- */
+  updateNavUser() {
+    const user = VEA.user();
+    const navAvInit = document.getElementById('navAvInit');
+    const navAvImg  = document.getElementById('navAvImg');
+    const navUname  = document.getElementById('navUname');
+    if (!user) return;
+    if (navUname)  navUname.textContent = user.display_name || user.username;
+    if (navAvInit) navAvInit.textContent = (user.display_name || user.username).charAt(0).toUpperCase();
+    if (navAvImg && user.avatar) {
+      navAvImg.src = user.avatar;
+      navAvImg.style.display = 'block';
+      if (navAvInit) navAvInit.style.display = 'none';
+    }
+  },
+
+  /* ---- REDIRECT IF NOT LOGGED IN ---- */
+  requireLogin() {
+    if (!VEA.isLoggedIn()) { window.location.href = 'login.html'; }
+  },
+};
+
+/* ================================================================
+   LANDING PAGE
+================================================================ */
+if (PAGE.IS_LANDING) {
+  (async () => {
+    // update nav auth button
+    const navAuth = document.getElementById('navAuthBtn');
+    if (VEA.isLoggedIn() && navAuth) {
+      navAuth.textContent = 'Dashboard';
+      navAuth.href = 'dashboard.html';
+    }
+
+    try {
+      const cfg = await fetch('config.json').then(r=>r.json());
+      // render features
+      const fg = document.getElementById('featGrid');
+      if (fg && cfg.features) {
+        cfg.features.forEach((f, i) => {
+          const card = document.createElement('div');
+          card.className = 'fc glass';
+          card.style.animationDelay = `${i*0.07}s`;
+          card.style.animation = `fcIn 0.45s cubic-bezier(0.22,1,0.36,1) ${i*0.07}s both`;
+          card.innerHTML = `<div class="fc-ico">${f.icon}</div><div class="fc-name">${f.title}</div><div class="fc-desc">${f.desc}</div>`;
+          fg.appendChild(card);
+        });
+        const st = document.createElement('style');
+        st.textContent = '@keyframes fcIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}';
+        document.head.appendChild(st);
+      }
+      // render files
+      const fr = document.getElementById('filesRow');
+      if (fr && cfg.supported_files) {
+        cfg.supported_files.forEach(f => {
+          const pill = document.createElement('div');
+          pill.className = 'fp glass';
+          pill.innerHTML = `<div class="fp-dot" style="background:${f.color};box-shadow:0 0 7px ${f.color}55"></div><div><div class="fp-ext">.${f.ext}</div><div class="fp-lbl">${f.label}</div></div>`;
+          fr.appendChild(pill);
+        });
+      }
+    } catch(e) {
+      // fallback — render inline
+      const fg = document.getElementById('featGrid');
+      if (fg) fg.innerHTML = '<p style="color:var(--w3);font-size:0.8rem">Features loaded inline.</p>';
+    }
+  })();
+}
+
+/* ================================================================
+   LOGIN PAGE
+================================================================ */
+if (PAGE.IS_LOGIN) {
+
+  const VAL = window.VAL = {
+    mode: new URLSearchParams(location.search).get('m') === 'register' ? 'register' : 'login',
+    regStep: 0,
+    avatarB64: null,
+
+    switchTab(m) {
+      VAL.mode = m;
+      document.getElementById('tLogin').classList.toggle('on', m==='login');
+      document.getElementById('tRegister').classList.toggle('on', m==='register');
+      document.getElementById('acMode').textContent = m==='login' ? 'Selamat datang kembali' : 'Buat akun baru';
+      document.getElementById('sLoginForm').classList.toggle('on', m==='login');
+      document.getElementById('footLogin').style.display = m==='login' ? '' : 'none';
+      document.getElementById('footReg').style.display   = m==='register' ? '' : 'none';
+      if (m==='register') { VAL.regStep=0; VAL.showRegStep(0); }
+    },
+
+    showRegStep(s) {
+      VAL.regStep = s;
+      ['sReg1','sReg2','sReg3'].forEach((id,i) => {
+        document.getElementById(id).classList.toggle('on', i===s);
+      });
+      document.getElementById('btnBack').style.display = s>0 ? '' : 'none';
+      document.getElementById('btnNext').textContent = s===2 ? 'Buat Akun' : 'Lanjut →';
+    },
+  };
+
+  // init
+  VAL.switchTab(VAL.mode);
+
+  // Build all PIN rows
+  ['lPinRow','rPin1Row','rPin2Row'].forEach(id => VEA.buildPinRow(id));
+
+  // Avatar upload
+  const avFile = document.getElementById('avFile');
+  if (avFile) {
+    avFile.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        VAL.avatarB64 = ev.target.result;
+        const img = document.getElementById('avPreviewImg');
+        const plus = document.getElementById('avPlus');
+        if (img) { img.src = ev.target.result; img.style.display='block'; }
+        if (plus) plus.style.display='none';
+      };
+      reader.readAsDataURL(file);
     });
+  }
 
-  function renderFeatures(features) {
-    const grid = document.getElementById('featuresGrid');
-    if (!grid) return;
-    features.forEach((f, i) => {
-      const card = document.createElement('div');
-      card.className = 'feature-card';
-      card.style.animationDelay = `${i * 0.07}s`;
-      card.style.animation = `fadeUpCard 0.5s cubic-bezier(0.22,1,0.36,1) ${i*0.07}s both`;
-      card.innerHTML = `
-        <div class="fc-icon">${f.icon}</div>
-        <div class="fc-label">${f.label}</div>
-        <div class="fc-desc">${f.desc}</div>
-      `;
-      grid.appendChild(card);
-    });
+  // Register: NEXT button
+  document.getElementById('btnNext')?.addEventListener('click', async () => {
+    if (VAL.regStep === 0) {
+      // validate username
+      const user = document.getElementById('rUser')?.value.trim();
+      if (!user || !/^[a-zA-Z0-9_]{3,32}$/.test(user)) {
+        document.getElementById('rUserErr').classList.add('show');
+        return;
+      }
+      document.getElementById('rUserErr').classList.remove('show');
+      VAL.showRegStep(1);
+    }
+    else if (VAL.regStep === 1) {
+      const p1 = VEA.getPinValue('rPin1Row');
+      const p2 = VEA.getPinValue('rPin2Row');
+      if (p1.length !== 10 || p2.length !== 10 || p1 !== p2) {
+        document.getElementById('rPinErr').classList.add('show');
+        return;
+      }
+      document.getElementById('rPinErr').classList.remove('show');
+      VAL.showRegStep(2);
+    }
+    else if (VAL.regStep === 2) {
+      if (!document.getElementById('tosOk')?.checked) {
+        VEA.toast('Setujui Terms of Service terlebih dahulu.', 'err');
+        return;
+      }
+      await VAL.doRegister();
+    }
+  });
 
-    // inject keyframe if not already done
-    if (!document.getElementById('fadekf')) {
-      const st = document.createElement('style');
-      st.id = 'fadekf';
-      st.textContent = `@keyframes fadeUpCard { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }`;
-      document.head.appendChild(st);
+  document.getElementById('btnBack')?.addEventListener('click', () => {
+    if (VAL.regStep > 0) VAL.showRegStep(VAL.regStep - 1);
+  });
+
+  // Login button
+  document.getElementById('btnLogin')?.addEventListener('click', () => VAL.doLogin());
+
+  VAL.doRegister = async () => {
+    const username    = document.getElementById('rUser')?.value.trim();
+    const displayName = document.getElementById('rDisplay')?.value.trim() || username;
+    const pin         = VEA.getPinValue('rPin1Row');
+
+    VEA.loaderOn('Menyiapkan akun VeaCode...');
+    VEA.loaderProgress(10, 'Memvalidasi data...');
+
+    const existing = VEA.get(LS.USER);
+    if (existing) {
+      VEA.loaderOff();
+      VEA.toast('Sudah ada akun di perangkat ini. Hapus akun lama dulu dari Settings.', 'err');
+      return;
+    }
+
+    // animate progress 10→20→40→60→80→100 over 10–20 seconds
+    const totalMs = 10000 + Math.random() * 10000;
+    const steps = [
+      { pct:20, msg:'Membuat hash PIN...',        at: totalMs*0.1 },
+      { pct:40, msg:'Menyiapkan profil...',        at: totalMs*0.3 },
+      { pct:60, msg:'Menulis ke localStorage...',  at: totalMs*0.55 },
+      { pct:80, msg:'Memverifikasi akun...',        at: totalMs*0.75 },
+      { pct:95, msg:'Hampir selesai...',            at: totalMs*0.9 },
+    ];
+    steps.forEach(s => setTimeout(() => VEA.loaderProgress(s.pct, s.msg), s.at));
+
+    await new Promise(r => setTimeout(r, totalMs));
+
+    const pinHash = await VEA.sha256(pin);
+    const now = new Date().toISOString();
+    const user = {
+      username, display_name: displayName,
+      avatar: VAL.avatarB64 || null,
+      pin_hash: pinHash,
+      created_at: now,
+      updated_at: now,
+    };
+    VEA.set(LS.USER, user);
+    VEA.set(LS.SESSION, { username, logged_at: now });
+    VEA.set(LS.ACTIVITY, [{ msg: 'Akun dibuat', ts: now }]);
+
+    VEA.loaderProgress(100, 'Akun siap!');
+    await new Promise(r => setTimeout(r, 500));
+    VEA.loaderOff();
+    VEA.toast('Akun berhasil dibuat!', 'ok');
+    setTimeout(() => window.location.href = 'dashboard.html', 600);
+  };
+
+  VAL.doLogin = async () => {
+    const username = document.getElementById('lUser')?.value.trim();
+    const pin      = VEA.getPinValue('lPinRow');
+    const user     = VEA.get(LS.USER);
+
+    document.getElementById('lUserErr').classList.remove('show');
+    document.getElementById('lPinErr').classList.remove('show');
+
+    if (!user || user.username !== username) {
+      document.getElementById('lUserErr').classList.add('show');
+      return;
+    }
+    const pinHash = await VEA.sha256(pin);
+    if (pinHash !== user.pin_hash) {
+      document.getElementById('lPinErr').classList.add('show');
+      VEA.clearPinRow('lPinRow');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    VEA.set(LS.SESSION, { username, logged_at: now });
+    VEA.logActivity('Login berhasil');
+    VEA.toast('Selamat datang kembali!', 'ok');
+    setTimeout(() => window.location.href = 'dashboard.html', 400);
+  };
+}
+
+/* ================================================================
+   DASHBOARD PAGE
+================================================================ */
+if (PAGE.IS_DASHBOARD) {
+  VEA.requireLogin();
+  const user = VEA.user();
+
+  // nav
+  VEA.updateNavUser();
+
+  // greeting
+  const init = (user.display_name || user.username).charAt(0).toUpperCase();
+  const greetInit = document.getElementById('greetInit');
+  const greetAvImg = document.getElementById('greetAvImg');
+  if (greetInit) greetInit.textContent = init;
+  if (greetAvImg && user.avatar) {
+    greetAvImg.src = user.avatar; greetAvImg.style.display = 'block';
+    if (greetInit) greetInit.style.display = 'none';
+  }
+
+  const hour = new Date().getHours();
+  const salut = hour<12 ? 'Selamat pagi' : hour<17 ? 'Selamat siang' : 'Selamat malam';
+  const hi = document.getElementById('greetHi');
+  if (hi) hi.textContent = `${salut}, ${user.display_name || user.username}!`;
+
+  // stats
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  set('sUsername',  '@' + user.username);
+  set('sCreated',   VEA.fmtDate(user.created_at));
+  set('sStorage',   VEA.storageSize());
+  const sess = VEA.session();
+  set('sLastLogin', sess ? VEA.relTime(sess.logged_at) : '—');
+
+  // activity
+  const acts = VEA.get(LS.ACTIVITY) || [];
+  const actList = document.getElementById('actList');
+  if (actList) {
+    if (!acts.length) {
+      actList.innerHTML = '<div class="act-empty">Belum ada aktivitas.</div>';
+    } else {
+      acts.slice(0,8).forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'act-row';
+        row.innerHTML = `<span class="act-ico">·</span><span class="act-msg">${a.msg}</span><span class="act-ts">${VEA.relTime(a.ts)}</span>`;
+        actList.appendChild(row);
+      });
     }
   }
-
-  const FILE_META = {
-    html: { color:'#e96c3b', name:'HTML5'   },
-    css:  { color:'#38b8ff', name:'CSS3'    },
-    js:   { color:'#f0da4a', name:'JavaScript' },
-    json: { color:'#a0e87c', name:'JSON'    },
-    py:   { color:'#4ebeff', name:'Python (preview)' },
-  };
-
-  function renderFiles(files) {
-    const row = document.getElementById('filesRow');
-    if (!row) return;
-    files.forEach(ext => {
-      const meta = FILE_META[ext] || { color:'#fff', name: ext.toUpperCase() };
-      const badge = document.createElement('div');
-      badge.className = 'file-badge';
-      badge.innerHTML = `
-        <div class="fb-dot" style="background:${meta.color};box-shadow:0 0 8px ${meta.color}66"></div>
-        <div>
-          <div class="fb-ext">.${ext}</div>
-          <div class="fb-name">${meta.name}</div>
-        </div>
-      `;
-      row.appendChild(badge);
-    });
-  }
 }
 
-/* ============================================================
-   EDITOR PAGE LOGIC
-============================================================ */
-if (IS_EDITOR) {
+/* ================================================================
+   EDITOR PAGE
+================================================================ */
+if (PAGE.IS_EDITOR) {
 
-  /* ---- FILE COLOR MAP ---- */
-  const FILE_COLORS = {
-    html:'#e96c3b', css:'#38b8ff', js:'#f0da4a',
-    json:'#a0e87c', py:'#4ebeff', txt:'#aaa',
-  };
-
-  function extColor(name) {
-    const ext = name.split('.').pop().toLowerCase();
-    return FILE_COLORS[ext] || '#aaaaaa';
-  }
-
-  /* ---- DEFAULT TEMPLATES ---- */
   const TEMPLATES = {
-    'index.html': `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>My Page</title>
-</head>
-<body>
-
-  <h1>Hello, World!</h1>
-  <p>Edit the code then press <strong>Run</strong>.</p>
-  <button id="btn">Click me</button>
-
-</body>
-</html>`,
-    'style.css': `* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: 'Segoe UI', sans-serif;
-  background: #f0f0f0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  gap: 16px;
-  padding: 20px;
-}
-
-h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: #1a1a1a;
-}
-
-p { color: #666; }
-
-#btn {
-  padding: 10px 24px;
-  background: #6e58ff;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-#btn:hover { transform: translateY(-2px); }`,
-    'script.js': `const btn = document.getElementById('btn');
-let count = 0;
-
-btn.addEventListener('click', () => {
-  count++;
-  btn.textContent = \`Clicked \${count}x\`;
-  console.log('Count:', count);
-});
-
-console.log('Ready!');`,
+    'index.html': `<!DOCTYPE html>\n<html lang="id">\n<head>\n  <meta charset="UTF-8"/>\n  <title>My Project</title>\n</head>\n<body>\n\n  <h1>Hello, World!</h1>\n  <p>Edit kode lalu klik <strong>Run</strong>.</p>\n  <button id="btn">Klik aku</button>\n\n</body>\n</html>`,
+    'style.css':  `* {\n  box-sizing: border-box;\n  margin: 0; padding: 0;\n}\n\nbody {\n  font-family: 'Segoe UI', sans-serif;\n  background: #f0f0f0;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  min-height: 100vh;\n  gap: 16px;\n  padding: 20px;\n}\n\nh1 {\n  font-size: 2.4rem;\n  font-weight: 700;\n  color: #111;\n}\n\n#btn {\n  padding: 10px 24px;\n  background: #4f6fff;\n  color: #fff;\n  border: none;\n  border-radius: 8px;\n  font-size: 1rem;\n  cursor: pointer;\n  transition: transform 0.15s;\n}\n#btn:hover { transform: translateY(-2px); }`,
+    'script.js':  `const btn = document.getElementById('btn');\nlet count = 0;\n\nbtn.addEventListener('click', () => {\n  count++;\n  btn.textContent = \`Diklik \${count}x\`;\n  console.log('Count:', count);\n});\n\nconsole.log('VeaCode 2.0 — Script loaded!');`,
   };
 
-  /* ---- STATE ---- */
-  let files = {};        // { name: content }
-  let activeFile = null;
+  const FILE_EXT_COLOR = { html:'#e96c3b', css:'#38b8ff', js:'#f0db4f', json:'#7ee787', py:'#4ebeff', txt:'#888' };
+  function extColor(name) { const e=name.split('.').pop().toLowerCase(); return FILE_EXT_COLOR[e]||'#aaa'; }
+  function defaultContent(name) {
+    if (TEMPLATES[name]) return TEMPLATES[name];
+    const e=name.split('.').pop().toLowerCase();
+    if (e==='html') return `<!DOCTYPE html>\n<html>\n<head><title>${name}</title></head>\n<body>\n\n</body>\n</html>`;
+    if (e==='css')  return `/* ${name} */\n`;
+    if (e==='js')   return `// ${name}\n`;
+    if (e==='json') return `{\n  \n}`;
+    if (e==='py')   return `# ${name}\n# Python preview only — not executed\n`;
+    return '';
+  }
+
+  let files = { 'index.html': TEMPLATES['index.html'], 'style.css': TEMPLATES['style.css'], 'script.js': TEMPLATES['script.js'] };
+  let activeFile = 'index.html';
   let logCount = 0;
 
-  /* ---- DOM REFS ---- */
-  const fileTabs      = document.getElementById('fileTabs');
-  const sidebarFiles  = document.getElementById('sidebarFiles');
-  const lineNumbers   = document.getElementById('lineNumbers');
-  const codeTextarea  = document.getElementById('codeTextarea');
-  const previewFrame  = document.getElementById('previewFrame');
-  const previewEmpty  = document.getElementById('previewEmpty');
-  const statusDot     = document.getElementById('statusDot');
-  const consoleBody   = document.getElementById('consoleBody');
-  const logBadge      = document.getElementById('logBadge');
-  const editorPane    = document.getElementById('editorPane');
-  const outputPane    = document.getElementById('outputPane');
-  const hDivider      = document.getElementById('hDivider');
-  const previewPane   = document.getElementById('previewPane');
-  const consolePane   = document.getElementById('consolePane');
-  const vDivider      = document.getElementById('vDivider');
-  const flashBar      = document.getElementById('flashBar');
-  const addFileModal  = document.getElementById('addFileModal');
+  const edTa   = document.getElementById('edTa');
+  const edLnum = document.getElementById('edLnum');
+  const prevFrame = document.getElementById('prevFrame');
+  const prevEmpty = document.getElementById('prevEmpty');
+  const sdotSt    = document.getElementById('sdotSt');
+  const conBody   = document.getElementById('conBody');
+  const logBadge  = document.getElementById('logBadge');
+  const flashBar  = document.getElementById('flashBar');
 
-  /* ============================================================
-     INIT
-  ============================================================ */
-  function init() {
-    loadFiles();
-    renderSidebar();
-    renderTabs();
-    if (activeFile) switchFile(activeFile);
-    setupDividers();
-    setupEvents();
-    setupConsoleRelay();
-  }
+  function saveActive() { if (activeFile) files[activeFile] = edTa.value; }
+  function getFileByExt(ext) { const e=Object.entries(files).find(([n])=>n.endsWith('.'+ext)); return e?e[1]:null; }
 
-  /* ---- LOAD FILES ---- */
-  function loadFiles() {
-    // No localStorage save — lite, testing only
-    // Just init with defaults
-    files = {
-      'index.html': TEMPLATES['index.html'],
-      'style.css':  TEMPLATES['style.css'],
-      'script.js':  TEMPLATES['script.js'],
-    };
-    activeFile = 'index.html';
-  }
-
-  /* ---- SAVE CURRENT TEXTAREA ---- */
-  function saveActive() {
-    if (activeFile) files[activeFile] = codeTextarea.value;
-  }
-
-  /* ---- SWITCH FILE ---- */
   function switchFile(name) {
-    saveActive();
-    activeFile = name;
-    codeTextarea.value = files[name] || '';
-    updateLineNums();
-    codeTextarea.focus();
-    renderSidebar();
-    renderTabs();
+    saveActive(); activeFile = name;
+    edTa.value = files[name] || '';
+    renderLineNums(); renderTabs(); renderSidebar(); edTa.focus();
   }
 
-  /* ---- RENDER SIDEBAR ---- */
+  function renderLineNums() {
+    const n = edTa.value.split('\n').length;
+    edLnum.innerHTML = Array.from({length:n},(_,i)=>`<span class="lnum-n">${i+1}</span>`).join('');
+    edLnum.scrollTop = edTa.scrollTop;
+  }
+
   function renderSidebar() {
-    sidebarFiles.innerHTML = '';
+    const sb = document.getElementById('sbFiles');
+    if (!sb) return;
+    sb.innerHTML = '';
     Object.keys(files).forEach(name => {
       const item = document.createElement('div');
-      item.className = 'sidebar-file-item' + (name === activeFile ? ' active' : '');
-      item.innerHTML = `
-        <div class="sfi-dot" style="background:${extColor(name)}"></div>
-        <span class="sfi-name" title="${name}">${name}</span>
-        <button class="sfi-del" data-del="${name}" title="Remove file">✕</button>
-      `;
-      item.querySelector('.sfi-name').addEventListener('click', () => switchFile(name));
-      item.querySelector('.sfi-del').addEventListener('click', e => {
-        e.stopPropagation();
-        removeFile(name);
-      });
-      sidebarFiles.appendChild(item);
+      item.className = 'sf' + (name===activeFile?' on':'');
+      item.innerHTML = `<div class="sf-dot" style="background:${extColor(name)}"></div><span class="sf-name" title="${name}">${name}</span><button class="sf-del" data-n="${name}">✕</button>`;
+      item.querySelector('.sf-name').addEventListener('click', ()=>switchFile(name));
+      item.querySelector('.sf-del').addEventListener('click', e=>{ e.stopPropagation(); removeFile(name); });
+      sb.appendChild(item);
     });
   }
 
-  /* ---- RENDER TABS ---- */
   function renderTabs() {
-    fileTabs.innerHTML = '';
+    const tabs = document.getElementById('etbTabs');
+    if (!tabs) return;
+    tabs.innerHTML = '';
     Object.keys(files).forEach(name => {
       const tab = document.createElement('div');
-      tab.className = 'file-tab' + (name === activeFile ? ' active' : '');
-      tab.innerHTML = `
-        <div class="ft-indicator" style="background:${extColor(name)}"></div>
-        <span>${name}</span>
-        <button class="ft-close" data-del="${name}">✕</button>
-      `;
-      tab.querySelector('span').addEventListener('click', () => switchFile(name));
-      tab.querySelector('.ft-close').addEventListener('click', e => {
-        e.stopPropagation();
-        removeFile(name);
-      });
-      fileTabs.appendChild(tab);
+      tab.className = 'ftab' + (name===activeFile?' on':'');
+      tab.innerHTML = `<div class="ftab-dot" style="background:${extColor(name)}"></div><span>${name}</span><button class="ftab-close" data-n="${name}">✕</button>`;
+      tab.querySelector('span').addEventListener('click', ()=>switchFile(name));
+      tab.querySelector('.ftab-close').addEventListener('click', e=>{ e.stopPropagation(); removeFile(name); });
+      tabs.appendChild(tab);
     });
   }
 
-  /* ---- ADD / REMOVE FILE ---- */
   function addFile(name, content) {
-    if (!name) return;
-    // clean name
-    name = name.trim().replace(/\s+/g, '-');
+    name = name.trim().replace(/\s+/g,'-');
     if (!name.includes('.')) name += '.html';
-    files[name] = content || getDefaultContent(name);
-    renderSidebar();
-    renderTabs();
-    switchFile(name);
+    files[name] = content !== undefined ? content : defaultContent(name);
+    renderSidebar(); renderTabs(); switchFile(name);
   }
 
   function removeFile(name) {
-    if (Object.keys(files).length <= 1) return; // keep at least 1 file
+    if (Object.keys(files).length <= 1) { VEA.toast('Minimal harus ada 1 file.', 'err'); return; }
     delete files[name];
-    if (activeFile === name) {
-      activeFile = Object.keys(files)[0];
-      codeTextarea.value = files[activeFile];
-      updateLineNums();
-    }
-    renderSidebar();
-    renderTabs();
+    if (activeFile === name) { activeFile = Object.keys(files)[0]; edTa.value = files[activeFile]; }
+    renderLineNums(); renderSidebar(); renderTabs();
   }
 
-  function getDefaultContent(name) {
-    const ext = name.split('.').pop().toLowerCase();
-    if (ext === 'html') return `<!DOCTYPE html>\n<html>\n<head><title>${name}</title></head>\n<body>\n\n</body>\n</html>`;
-    if (ext === 'css')  return `/* ${name} */\n`;
-    if (ext === 'js')   return `// ${name}\n`;
-    if (ext === 'json') return `{\n  \n}`;
-    if (ext === 'py')   return `# ${name}\n# Note: Python runs as preview only (no execution)\n`;
-    return ``;
-  }
-
-  /* ---- LINE NUMBERS ---- */
-  function updateLineNums() {
-    const n = codeTextarea.value.split('\n').length;
-    lineNumbers.innerHTML = Array.from({ length: n }, (_, i) =>
-      `<span class="ln-num">${i + 1}</span>`
-    ).join('');
-    syncLineScroll();
-  }
-
-  function syncLineScroll() {
-    lineNumbers.scrollTop = codeTextarea.scrollTop;
-  }
-
-  /* ============================================================
-     RUN PREVIEW
-  ============================================================ */
+  // RUN
   function runPreview() {
     saveActive();
+    flashBar.style.width='0%'; flashBar.style.transition='none';
+    requestAnimationFrame(()=>{ flashBar.style.transition='width 0.38s cubic-bezier(0.22,1,0.36,1)'; flashBar.style.width='100%'; });
+    setTimeout(()=>{ flashBar.style.width='0%'; flashBar.style.transition='none'; }, 450);
 
-    // Flash bar animation
-    flashBar.style.width = '0%';
-    requestAnimationFrame(() => {
-      flashBar.style.transition = 'width 0.38s cubic-bezier(0.22,1,0.36,1)';
-      flashBar.style.width = '100%';
-    });
-    setTimeout(() => { flashBar.style.width = '0%'; flashBar.style.transition = 'width 0.1s'; }, 450);
-
-    statusDot.className = 'status-dot loading';
+    sdotSt.className = 'sdot-st run';
     clearConsole(false);
 
-    // Build combined document from all files
-    const html   = getFileByExt('html') || '<html><body></body></html>';
-    const css    = Object.entries(files)
-      .filter(([n]) => n.endsWith('.css'))
-      .map(([, v]) => v).join('\n');
-    const js     = Object.entries(files)
-      .filter(([n]) => n.endsWith('.js'))
-      .map(([, v]) => v).join('\n');
+    const html = getFileByExt('html') || '<html><body></body></html>';
+    const css  = Object.entries(files).filter(([n])=>n.endsWith('.css')).map(([,v])=>v).join('\n');
+    const js   = Object.entries(files).filter(([n])=>n.endsWith('.js')).map(([,v])=>v).join('\n');
 
-    // console shim injected into iframe
-    const SHIM = `<script>
-(function(){
-  const _p = function(lvl, args) {
-    const msg = Array.from(args).map(a => {
-      try { return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a); }
-      catch(e) { return '[unserializable]'; }
-    }).join(' ');
-    window.parent.postMessage({ type:'__ct_log', level:lvl, msg }, '*');
-  };
-  ['log','info','warn','error'].forEach(m => {
-    const o = console[m].bind(console);
-    console[m] = function(){ _p(m, arguments); o.apply(console, arguments); };
-  });
-  window.addEventListener('error', e => {
-    window.parent.postMessage({ type:'__ct_err', msg: e.message + ' (line ' + e.lineno + ')' }, '*');
-  });
-  window.addEventListener('unhandledrejection', e => {
-    window.parent.postMessage({ type:'__ct_err', msg: 'Unhandled: ' + e.reason }, '*');
-  });
-})();
-<\/script>`;
+    const SHIM = `<script>(function(){const _p=function(l,a){const m=Array.from(a).map(x=>{try{return typeof x==='object'?JSON.stringify(x,null,2):String(x);}catch{return '[?]';}}).join(' ');window.parent.postMessage({type:'__vea_log',level:l,msg:m},'*');};['log','info','warn','error'].forEach(m=>{const o=console[m].bind(console);console[m]=function(){_p(m,arguments);o.apply(console,arguments);};});window.addEventListener('error',e=>{window.parent.postMessage({type:'__vea_err',msg:e.message+' (line '+e.lineno+')'},'*');});window.addEventListener('unhandledrejection',e=>{window.parent.postMessage({type:'__vea_err',msg:'Unhandled: '+e.reason},'*');});})();<\/script>`;
 
     let doc = html;
+    if (css) { const s=`<style>\n${css}\n</style>`; doc=/<\/head>/i.test(doc)?doc.replace(/<\/head>/i,s+'\n</head>'):s+'\n'+doc; }
+    const scriptEl = SHIM + `<script>\n${js}\n<\/script>`;
+    doc = /<\/body>/i.test(doc)?doc.replace(/<\/body>/i,scriptEl+'\n</body>'):doc+'\n'+scriptEl;
 
-    // inject CSS
-    if (css) {
-      const styleEl = `<style>\n${css}\n</style>`;
-      if (/<\/head>/i.test(doc)) doc = doc.replace(/<\/head>/i, `${styleEl}\n</head>`);
-      else doc = styleEl + '\n' + doc;
-    }
-
-    // inject JS + shim
-    if (js || true) {
-      const scriptEl = `${SHIM}<script>\n${js}\n<\/script>`;
-      if (/<\/body>/i.test(doc)) doc = doc.replace(/<\/body>/i, `${scriptEl}\n</body>`);
-      else doc += '\n' + scriptEl;
-    }
-
-    // short delay for perceived accuracy, then render
-    const delay = 200 + Math.random() * 200; // 200-400ms (fast but not instant)
-    setTimeout(() => {
+    const delay = 200 + Math.random()*200;
+    setTimeout(()=>{
       try {
-        previewFrame.srcdoc = doc;
-        previewFrame.classList.add('visible');
-        previewEmpty.style.display = 'none';
-        statusDot.className = 'status-dot ok';
-      } catch (e) {
-        statusDot.className = 'status-dot error';
-        addLog('error', 'Preview build failed: ' + e.message);
+        prevFrame.srcdoc = doc;
+        prevFrame.classList.add('show');
+        prevEmpty.style.display = 'none';
+        sdotSt.className = 'sdot-st ok';
+      } catch(e) {
+        sdotSt.className = 'sdot-st err';
+        addLog('error', 'Build failed: '+e.message);
       }
     }, delay);
   }
 
-  function getFileByExt(ext) {
-    const entry = Object.entries(files).find(([n]) => n.endsWith('.' + ext));
-    return entry ? entry[1] : null;
-  }
+  // CONSOLE
+  window.addEventListener('message', e => {
+    if (!e.data) return;
+    if (e.data.type==='__vea_log') addLog(e.data.level, e.data.msg);
+    if (e.data.type==='__vea_err') { addLog('error', e.data.msg); sdotSt.className='sdot-st err'; }
+  });
 
-  /* ============================================================
-     CONSOLE
-  ============================================================ */
-  function setupConsoleRelay() {
-    window.addEventListener('message', e => {
-      if (!e.data) return;
-      if (e.data.type === '__ct_log') addLog(e.data.level, e.data.msg);
-      if (e.data.type === '__ct_err') {
-        addLog('error', e.data.msg);
-        statusDot.className = 'status-dot error';
-      }
-    });
-  }
-
-  const LEVEL_ICONS = { log:'›', info:'ℹ', warn:'⚠', error:'✕' };
-
+  const ICONS = { log:'›', info:'ℹ', warn:'⚠', error:'✕' };
   function addLog(level, msg) {
-    const placeholder = consoleBody.querySelector('.console-placeholder');
-    if (placeholder) placeholder.remove();
-
-    const entry = document.createElement('div');
-    entry.className = `console-entry level-${level}`;
-    entry.innerHTML = `<span class="ce-icon">${LEVEL_ICONS[level] || '›'}</span><span class="ce-msg">${escHtml(msg)}</span>`;
-    consoleBody.appendChild(entry);
-    consoleBody.scrollTop = consoleBody.scrollHeight;
-
+    const ph = conBody.querySelector('.con-ph');
+    if (ph) ph.remove();
+    const line = document.createElement('div');
+    line.className = `cline ${level}`;
+    line.innerHTML = `<span class="cline-ic">${ICONS[level]||'›'}</span><span class="cline-msg">${msg.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+    conBody.appendChild(line);
+    conBody.scrollTop = conBody.scrollHeight;
     logCount++;
-    logBadge.textContent = logCount;
-    logBadge.classList.add('show');
+    logBadge.textContent = logCount; logBadge.classList.add('show');
   }
 
-  function clearConsole(resetCount = true) {
-    consoleBody.innerHTML = '<div class="console-placeholder">// output appears here</div>';
-    if (resetCount) {
-      logCount = 0;
-      logBadge.classList.remove('show');
+  function clearConsole(resetCount=true) {
+    conBody.innerHTML = '<div class="con-ph">// output muncul di sini</div>';
+    if (resetCount) { logCount=0; logBadge.classList.remove('show'); }
+  }
+
+  // DIVIDERS
+  (function setupDividers() {
+    // H divider (editor width)
+    const hDiv = document.getElementById('hDiv');
+    const edPane = document.getElementById('edPane');
+    const outPane = document.getElementById('outPane');
+    let draggingH=false, sx=0, sw=0;
+    hDiv.addEventListener('mousedown', e=>{ draggingH=true; sx=e.clientX; sw=edPane.offsetWidth; document.body.style.cursor='col-resize'; document.body.style.userSelect='none'; });
+    document.addEventListener('mousemove', e=>{ if(!draggingH)return; const total=edPane.parentElement.offsetWidth-hDiv.offsetWidth; const nw=Math.max(180,Math.min(total-180,sw+(e.clientX-sx))); edPane.style.flex='none'; edPane.style.width=nw+'px'; outPane.style.flex='none'; outPane.style.width=(total-nw)+'px'; });
+    document.addEventListener('mouseup',()=>{ if(draggingH){draggingH=false;document.body.style.cursor='';document.body.style.userSelect='';} });
+
+    // V divider (preview/console height)
+    const vDiv = document.getElementById('vDiv');
+    const prevPane = document.getElementById('prevPane');
+    const conPane  = document.getElementById('conPane');
+    let draggingV=false, sy=0, sh=0;
+    vDiv.addEventListener('mousedown', e=>{ draggingV=true; sy=e.clientY; sh=prevPane.offsetHeight; document.body.style.cursor='row-resize'; document.body.style.userSelect='none'; });
+    document.addEventListener('mousemove', e=>{ if(!draggingV)return; const total=outPane.offsetHeight-vDiv.offsetHeight; const nh=Math.max(70,Math.min(total-70,sh+(e.clientY-sy))); prevPane.style.flex='none'; prevPane.style.height=nh+'px'; conPane.style.flex='none'; conPane.style.height=(total-nh)+'px'; });
+    document.addEventListener('mouseup',()=>{ if(draggingV){draggingV=false;document.body.style.cursor='';document.body.style.userSelect='';} });
+  })();
+
+  // ADD FILE MODAL
+  let selExt = 'html';
+  const addModal = document.getElementById('addModal');
+  document.getElementById('addFileBtn')?.addEventListener('click', ()=>{ document.getElementById('newFileName').value=''; VEA.openModal('addModal'); setTimeout(()=>document.getElementById('newFileName').focus(),100); });
+  document.getElementById('closeModal')?.addEventListener('click', ()=>VEA.closeModal('addModal'));
+  document.getElementById('cancelModal')?.addEventListener('click', ()=>VEA.closeModal('addModal'));
+  addModal?.addEventListener('click', e=>{ if(e.target===addModal) VEA.closeModal('addModal'); });
+  document.querySelectorAll('#ftChips .ft-chip').forEach(c=>{
+    c.addEventListener('click',()=>{
+      selExt=c.dataset.e;
+      document.querySelectorAll('#ftChips .ft-chip').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on');
+      const inp=document.getElementById('newFileName');
+      const base=inp.value.replace(/\.[^.]+$/,'')||'new-file';
+      inp.value=base+'.'+selExt;
+    });
+  });
+  document.getElementById('confirmModal')?.addEventListener('click',()=>{
+    const name=document.getElementById('newFileName')?.value.trim();
+    if(name){ addFile(name); VEA.closeModal('addModal'); }
+  });
+  document.getElementById('newFileName')?.addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('confirmModal')?.click(); if(e.key==='Escape') VEA.closeModal('addModal'); });
+
+  // EVENTS
+  document.getElementById('runBtn')?.addEventListener('click', runPreview);
+  document.getElementById('btnRefresh')?.addEventListener('click', runPreview);
+  document.getElementById('btnClearCon')?.addEventListener('click', ()=>clearConsole(true));
+  document.getElementById('btnFs')?.addEventListener('click', ()=>{
+    const pp=document.getElementById('prevPane');
+    const fs=pp.classList.toggle('fs');
+    if(!fs){pp.style.height='';pp.style.flex='';}
+  });
+
+  edTa.addEventListener('input', ()=>{ files[activeFile]=edTa.value; renderLineNums(); });
+  edTa.addEventListener('scroll', ()=>{ edLnum.scrollTop=edTa.scrollTop; });
+
+  edTa.addEventListener('keydown', e=>{
+    if ((e.ctrlKey||e.metaKey) && e.key==='Enter') { e.preventDefault(); runPreview(); return; }
+    if (e.key==='Tab') {
+      e.preventDefault();
+      const s=edTa.selectionStart, v=edTa.value;
+      if (e.shiftKey) { const ls=v.lastIndexOf('\n',s-1)+1; if(v.substring(ls,ls+2)==='  '){ edTa.value=v.slice(0,ls)+v.slice(ls+2); edTa.selectionStart=edTa.selectionEnd=Math.max(ls,s-2); } }
+      else { edTa.value=v.slice(0,s)+'  '+v.slice(edTa.selectionEnd); edTa.selectionStart=edTa.selectionEnd=s+2; }
+      files[activeFile]=edTa.value; renderLineNums(); return;
     }
+    if (e.key==='Escape') { const pp=document.getElementById('prevPane'); if(pp.classList.contains('fs')){ pp.classList.remove('fs'); pp.style.height=''; pp.style.flex=''; } return; }
+    const P={'(':')','{':'}','[':']','"':'"',"'":"'"};
+    if (P[e.key]) {
+      e.preventDefault();
+      const s=edTa.selectionStart,en=edTa.selectionEnd,v=edTa.value,sel=v.slice(s,en);
+      document.execCommand('insertText',false,e.key+sel+P[e.key]);
+      edTa.selectionStart=edTa.selectionEnd=s+1;
+      files[activeFile]=edTa.value; renderLineNums();
+    }
+  });
+
+  // init
+  renderTabs(); renderSidebar(); switchFile('index.html');
+}
+
+/* ================================================================
+   SETTINGS PAGE
+================================================================ */
+if (PAGE.IS_SETTINGS) {
+  VEA.requireLogin();
+  VEA.updateNavUser();
+
+  const VS = window.VS = {
+    switchTab(t) {
+      document.getElementById('tabAccount').classList.toggle('on',  t==='account');
+      document.getElementById('tabSecurity').classList.toggle('on', t==='security');
+      document.getElementById('panelAccount').classList.toggle('on',  t==='account');
+      document.getElementById('panelSecurity').classList.toggle('on', t==='security');
+    },
+  };
+
+  // Build PIN rows
+  ['ucPinRow','pcPin1Row','pcPin2Row','pcPin3Row','delPinRow'].forEach(id => VEA.buildPinRow(id));
+
+  // Check hash param
+  if (location.hash === '#security') VS.switchTab('security');
+
+  const user = VEA.user();
+
+  // Populate current user data
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  const setVal = (id,v) => { const el=document.getElementById(id); if(el) el.value=v; };
+
+  setVal('displayNameInput', user.display_name || '');
+  const ucCur = document.getElementById('ucCurDisplay');
+  if (ucCur) ucCur.textContent = '@' + user.username;
+
+  // Avatar
+  const avBigImg  = document.getElementById('avBigImg');
+  const avBigInit = document.getElementById('avBigInit');
+  if (avBigInit) avBigInit.textContent = (user.display_name||user.username).charAt(0).toUpperCase();
+  const avBigName = document.getElementById('avBigName');
+  if (avBigName) avBigName.textContent = user.display_name || user.username;
+  if (avBigImg && user.avatar) { avBigImg.src=user.avatar; avBigImg.style.display='block'; if(avBigInit) avBigInit.style.display='none'; }
+
+  // avatar upload
+  const avFileInput = document.getElementById('avFileInput');
+  if (avFileInput) {
+    avFileInput.addEventListener('change', e=>{
+      const file=e.target.files[0]; if(!file)return;
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        const u=VEA.get(LS.USER);
+        u.avatar=ev.target.result; VEA.set(LS.USER,u);
+        if(avBigImg){avBigImg.src=ev.target.result;avBigImg.style.display='block';}
+        if(avBigInit) avBigInit.style.display='none';
+        VEA.toast('Foto profil diperbarui.','ok');
+        VEA.logActivity('Foto profil diubah');
+        VEA.updateNavUser();
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+  // remove avatar
+  document.getElementById('btnRemoveAv')?.addEventListener('click',()=>{
+    const u=VEA.get(LS.USER); u.avatar=null; VEA.set(LS.USER,u);
+    if(avBigImg){avBigImg.src='';avBigImg.style.display='none';}
+    if(avBigInit) avBigInit.style.display='';
+    VEA.toast('Foto profil dihapus.','ok'); VEA.logActivity('Foto profil dihapus');
+  });
 
-  /* ============================================================
-     DIVIDERS (resizable)
-  ============================================================ */
-  function setupDividers() {
-    // H-divider: editor width vs output width
-    let draggingH = false, startX = 0, startEdW = 0;
+  // save display name
+  document.getElementById('btnSaveDisplay')?.addEventListener('click',()=>{
+    const val=document.getElementById('displayNameInput')?.value.trim();
+    const u=VEA.get(LS.USER); u.display_name=val||u.username; VEA.set(LS.USER,u);
+    VEA.toast('Display name disimpan.','ok'); VEA.logActivity('Display name diubah');
+    VEA.updateNavUser();
+  });
 
-    hDivider.addEventListener('mousedown', e => {
-      draggingH = true;
-      startX   = e.clientX;
-      startEdW = editorPane.offsetWidth;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    });
-    document.addEventListener('mousemove', e => {
-      if (!draggingH) return;
-      const dx = e.clientX - startX;
-      const totalW = editorPane.parentElement.offsetWidth - hDivider.offsetWidth;
-      const newEdW = Math.max(200, Math.min(totalW - 200, startEdW + dx));
-      const newOutW = totalW - newEdW;
-      editorPane.style.flex = 'none';
-      editorPane.style.width = newEdW + 'px';
-      outputPane.style.flex = 'none';
-      outputPane.style.width = newOutW + 'px';
-    });
-    document.addEventListener('mouseup', () => {
-      if (draggingH) { draggingH = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
-    });
+  // username change
+  document.getElementById('btnUnlockUsername')?.addEventListener('click',()=>{
+    document.getElementById('ucLocked').style.display='none';
+    document.getElementById('ucForm').classList.add('show');
+  });
+  document.getElementById('btnCancelUc')?.addEventListener('click',()=>{
+    document.getElementById('ucLocked').style.display='';
+    document.getElementById('ucForm').classList.remove('show');
+    VEA.clearPinRow('ucPinRow');
+  });
+  document.getElementById('btnConfirmUc')?.addEventListener('click', async ()=>{
+    const newUser=document.getElementById('ucNewInput')?.value.trim();
+    const pin=VEA.getPinValue('ucPinRow');
+    const u=VEA.get(LS.USER);
 
-    // V-divider: preview height vs console height
-    let draggingV = false, startY = 0, startPH = 0;
+    document.getElementById('ucNewErr').classList.remove('show');
+    document.getElementById('ucPinErr').classList.remove('show');
 
-    vDivider.addEventListener('mousedown', e => {
-      draggingV = true;
-      startY  = e.clientY;
-      startPH = previewPane.offsetHeight;
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
-    });
-    document.addEventListener('mousemove', e => {
-      if (!draggingV) return;
-      const dy = e.clientY - startY;
-      const totalH = outputPane.offsetHeight - vDivider.offsetHeight;
-      const newPH = Math.max(80, Math.min(totalH - 80, startPH + dy));
-      previewPane.style.flex = 'none';
-      previewPane.style.height = newPH + 'px';
-      consolePane.style.flex = 'none';
-      consolePane.style.height = (totalH - newPH) + 'px';
-    });
-    document.addEventListener('mouseup', () => {
-      if (draggingV) { draggingV = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; }
-    });
-  }
+    if (!newUser||!/^[a-zA-Z0-9_]{3,32}$/.test(newUser)) { document.getElementById('ucNewErr').classList.add('show'); return; }
+    const pinHash=await VEA.sha256(pin);
+    if (pinHash!==u.pin_hash) { document.getElementById('ucPinErr').classList.add('show'); VEA.clearPinRow('ucPinRow'); return; }
 
-  /* ============================================================
-     ADD FILE MODAL
-  ============================================================ */
-  function openAddFileModal() {
-    addFileModal.classList.add('open');
-    document.getElementById('newFileName').focus();
-    document.getElementById('newFileName').value = '';
-  }
-  function closeAddFileModal() {
-    addFileModal.classList.remove('open');
-  }
+    u.username=newUser; u.display_name=u.display_name||newUser; VEA.set(LS.USER,u);
+    VEA.set(LS.SESSION,{username:newUser,logged_at:new Date().toISOString()});
+    VEA.logActivity('Username diubah ke @'+newUser);
+    const ucCurEl=document.getElementById('ucCurDisplay'); if(ucCurEl) ucCurEl.textContent='@'+newUser;
+    document.getElementById('ucLocked').style.display='';
+    document.getElementById('ucForm').classList.remove('show');
+    VEA.toast('Username berhasil diubah.','ok'); VEA.updateNavUser();
+  });
 
-  // File type chip auto-fill
-  let selectedExt = 'html';
-  document.querySelectorAll('.ft-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.ft-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      selectedExt = chip.dataset.ext;
-      const input = document.getElementById('newFileName');
-      const base = input.value.replace(/\.[^.]+$/, '') || 'new-file';
-      input.value = base + '.' + selectedExt;
+  // change PIN
+  document.getElementById('btnOpenPinChange')?.addEventListener('click',()=>{
+    document.getElementById('pinChangeForm').classList.add('show');
+  });
+  document.getElementById('btnCancelPinChange')?.addEventListener('click',()=>{
+    document.getElementById('pinChangeForm').classList.remove('show');
+    ['pcPin1Row','pcPin2Row','pcPin3Row'].forEach(id=>VEA.clearPinRow(id));
+  });
+  document.getElementById('btnConfirmPinChange')?.addEventListener('click', async ()=>{
+    const p1=VEA.getPinValue('pcPin1Row');
+    const p2=VEA.getPinValue('pcPin2Row');
+    const p3=VEA.getPinValue('pcPin3Row');
+    const u=VEA.get(LS.USER);
+
+    document.getElementById('pcOldErr').classList.remove('show');
+    document.getElementById('pcMatchErr').classList.remove('show');
+
+    const oldHash=await VEA.sha256(p2);
+    if (oldHash!==u.pin_hash) { document.getElementById('pcOldErr').classList.add('show'); VEA.clearPinRow('pcPin2Row'); return; }
+    if (p1!==p3||p1.length!==10) { document.getElementById('pcMatchErr').classList.add('show'); return; }
+
+    VEA.loaderOn('Mengubah PIN...');
+    const steps=[{pct:30,msg:'Membuat hash PIN baru...',at:2000},{pct:60,msg:'Memperbarui akun...',at:5000},{pct:90,msg:'Hampir selesai...',at:8500}];
+    steps.forEach(s=>setTimeout(()=>VEA.loaderProgress(s.pct,s.msg),s.at));
+    await new Promise(r=>setTimeout(r,10000));
+
+    const newHash=await VEA.sha256(p1);
+    u.pin_hash=newHash; VEA.set(LS.USER,u);
+    VEA.remove(LS.SESSION);
+    VEA.loaderProgress(100,'PIN berhasil diubah!');
+    VEA.logActivity('PIN diubah');
+    await new Promise(r=>setTimeout(r,500));
+    VEA.loaderOff();
+    VEA.toast('PIN diubah. Silakan login ulang.','ok');
+    setTimeout(()=>window.location.href='login.html',800);
+  });
+
+  // EXPORT
+  document.getElementById('btnExport')?.addEventListener('click', async ()=>{
+    VEA.loaderOn('Menyiapkan ekspor data...');
+    const steps=[{pct:30,msg:'Mengumpulkan data...',at:1500},{pct:60,msg:'Memformat JSON...',at:4000},{pct:90,msg:'Hampir selesai...',at:7000}];
+    steps.forEach(s=>setTimeout(()=>VEA.loaderProgress(s.pct,s.msg),s.at));
+    const delay=5000+Math.random()*5000;
+    await new Promise(r=>setTimeout(r,delay));
+
+    const data={
+      _version:'vea2_export_v1',
+      exported_at:new Date().toISOString(),
+      user:VEA.get(LS.USER),
+      activity:VEA.get(LS.ACTIVITY)||[],
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`veacode-backup-${Date.now()}.json`;
+    a.click();
+    VEA.loaderProgress(100,'Ekspor selesai!');
+    await new Promise(r=>setTimeout(r,400));
+    VEA.loaderOff(); VEA.toast('Data berhasil diekspor.','ok'); VEA.logActivity('Data diekspor');
+  });
+
+  // IMPORT
+  const importFile=document.getElementById('importFileInput');
+  document.getElementById('btnImport')?.addEventListener('click',()=>importFile?.click());
+  importFile?.addEventListener('change', async e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=async ev=>{
+      VEA.loaderOn('Mengimpor data...');
+      const steps=[{pct:15,msg:'Membaca file...',at:2000},{pct:35,msg:'Memvalidasi data...',at:6000},{pct:60,msg:'Menerapkan data...',at:12000},{pct:85,msg:'Memverifikasi...',at:18000}];
+      steps.forEach(s=>setTimeout(()=>VEA.loaderProgress(s.pct,s.msg),s.at));
+      const delay=20000+Math.random()*10000;
+      await new Promise(r=>setTimeout(r,delay));
+      try {
+        const parsed=JSON.parse(ev.target.result);
+        if (!parsed._version||!parsed.user) throw new Error('Format tidak valid');
+        VEA.set(LS.USER,parsed.user);
+        if(parsed.activity) VEA.set(LS.ACTIVITY,parsed.activity);
+        VEA.remove(LS.SESSION);
+        VEA.loaderProgress(100,'Impor selesai!');
+        await new Promise(r=>setTimeout(r,400));
+        VEA.loaderOff(); VEA.toast('Data berhasil diimpor. Silakan login ulang.','ok');
+        setTimeout(()=>window.location.href='login.html',800);
+      } catch(err) {
+        VEA.loaderOff(); VEA.toast('File tidak valid: '+err.message,'err');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  });
+
+  // LOGOUT
+  document.getElementById('btnLogout')?.addEventListener('click',()=>{
+    VEA.remove(LS.SESSION); VEA.logActivity('Logout');
+    VEA.toast('Berhasil logout.','ok');
+    setTimeout(()=>window.location.href='login.html',500);
+  });
+
+  // DELETE ACCOUNT
+  document.getElementById('btnDeleteAccount')?.addEventListener('click',()=>VEA.openModal('deleteModal'));
+  document.getElementById('btnConfirmDelete')?.addEventListener('click', async ()=>{
+    const pin=VEA.getPinValue('delPinRow');
+    const u=VEA.get(LS.USER);
+    const pinHash=await VEA.sha256(pin);
+    if(pinHash!==u.pin_hash){ document.getElementById('delPinErr').classList.add('show'); VEA.clearPinRow('delPinRow'); return; }
+    VEA.remove(LS.USER); VEA.remove(LS.SESSION); VEA.remove(LS.ACTIVITY);
+    VEA.closeModal('deleteModal');
+    VEA.toast('Akun berhasil dihapus.','ok');
+    setTimeout(()=>window.location.href='index.html',700);
+  });
+}
+
+/* ================================================================
+   DOCS PAGE
+================================================================ */
+if (PAGE.IS_DOCS) {
+  // accordion
+  document.querySelectorAll('.qa-item').forEach(item=>{
+    const q=item.querySelector('.qa-q');
+    if(!q)return;
+    q.addEventListener('click',()=>{
+      const wasOpen=item.classList.contains('open');
+      // close all in same block
+      item.closest('.qa-block')?.querySelectorAll('.qa-item.open').forEach(i=>i.classList.remove('open'));
+      if(!wasOpen) item.classList.add('open');
     });
   });
 
-  document.getElementById('addFileBtn').addEventListener('click', openAddFileModal);
-  document.getElementById('closeModal').addEventListener('click', closeAddFileModal);
-  document.getElementById('cancelModal').addEventListener('click', closeAddFileModal);
-  addFileModal.addEventListener('click', e => { if (e.target === addFileModal) closeAddFileModal(); });
-
-  document.getElementById('confirmAddFile').addEventListener('click', () => {
-    const name = document.getElementById('newFileName').value.trim();
-    if (name) { addFile(name); closeAddFileModal(); }
+  // smooth scroll for nav links
+  document.querySelectorAll('.doc-nav-link').forEach(link=>{
+    link.addEventListener('click',e=>{
+      const href=link.getAttribute('href');
+      if(href&&href.startsWith('#')){
+        e.preventDefault();
+        document.querySelector(href)?.scrollIntoView({behavior:'smooth',block:'start'});
+        document.querySelectorAll('.doc-nav-link').forEach(l=>l.classList.remove('cur'));
+        link.classList.add('cur');
+      }
+    });
   });
-  document.getElementById('newFileName').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('confirmAddFile').click();
-    if (e.key === 'Escape') closeAddFileModal();
-  });
 
-  /* ============================================================
-     EVENTS
-  ============================================================ */
-  function setupEvents() {
-    // Run
-    document.getElementById('btnRun').addEventListener('click', runPreview);
+  // auth button
+  const navAuth=document.getElementById('navAuthBtn');
+  if(navAuth && VEA.isLoggedIn()){ navAuth.textContent='Dashboard'; navAuth.href='dashboard.html'; }
+}
 
-    // Refresh
-    document.getElementById('btnRefresh').addEventListener('click', runPreview);
-
-    // Fullscreen preview
-    document.getElementById('btnFullscreen').addEventListener('click', () => {
-      const fs = previewPane.classList.toggle('fs-preview');
-      if (!fs) {
-        // restore layout
-        previewPane.style.height = '';
-        previewPane.style.flex = '';
-      }
-      document.getElementById('btnFullscreen').title = fs ? 'Exit fullscreen' : 'Fullscreen';
-    });
-
-    // Clear console
-    document.getElementById('btnClearConsole').addEventListener('click', () => clearConsole(true));
-
-    // Textarea
-    codeTextarea.addEventListener('input', () => {
-      files[activeFile] = codeTextarea.value;
-      updateLineNums();
-    });
-
-    codeTextarea.addEventListener('scroll', syncLineScroll);
-
-    codeTextarea.addEventListener('keydown', e => {
-      // Ctrl/Cmd + Enter = Run
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        runPreview();
-        return;
-      }
-
-      // Tab = 2-space indent
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        const s = codeTextarea.selectionStart;
-        const v = codeTextarea.value;
-        if (e.shiftKey) {
-          const ls = v.lastIndexOf('\n', s - 1) + 1;
-          if (v.substring(ls, ls + 2) === '  ') {
-            codeTextarea.value = v.slice(0, ls) + v.slice(ls + 2);
-            codeTextarea.selectionStart = codeTextarea.selectionEnd = Math.max(ls, s - 2);
-          }
-        } else {
-          codeTextarea.value = v.slice(0, s) + '  ' + v.slice(codeTextarea.selectionEnd);
-          codeTextarea.selectionStart = codeTextarea.selectionEnd = s + 2;
-        }
-        files[activeFile] = codeTextarea.value;
-        updateLineNums();
-        return;
-      }
-
-      // Auto-close brackets
-      const PAIRS = { '(':')', '[':']', '{':'}', '"':'"', "'":"'" };
-      if (PAIRS[e.key]) {
-        e.preventDefault();
-        const s = codeTextarea.selectionStart, end = codeTextarea.selectionEnd;
-        const sel = codeTextarea.value.slice(s, end);
-        const ins = e.key + sel + PAIRS[e.key];
-        document.execCommand('insertText', false, ins);
-        codeTextarea.selectionStart = codeTextarea.selectionEnd = s + 1;
-        files[activeFile] = codeTextarea.value;
-        updateLineNums();
-      }
-
-      // Escape closes fullscreen
-      if (e.key === 'Escape' && previewPane.classList.contains('fs-preview')) {
-        previewPane.classList.remove('fs-preview');
-        previewPane.style.height = '';
-        previewPane.style.flex = '';
-      }
-    });
-  }
-
-  /* ---- KICK OFF ---- */
-  init();
+/* ================================================================
+   TOS / LANDING — auth nav button
+================================================================ */
+if (PAGE.IS_TOS) {
+  const navAuth=document.getElementById('navAuthBtn');
+  if(navAuth && VEA.isLoggedIn()){ navAuth.textContent='Dashboard'; navAuth.href='dashboard.html'; }
 }
